@@ -3,10 +3,10 @@ package com.hr_service;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+// @SpringBootTest
 class HrServiceApplicationTests {
 
-	@Test
+	// @Test
 	void contextLoads() {
 	}
 

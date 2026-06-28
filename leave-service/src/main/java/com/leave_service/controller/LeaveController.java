@@ -90,6 +90,17 @@ public class LeaveController {
         return ResponseEntity.ok(leaveService.getAllLeaves(pageable));
     }
 
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getUserLeavesByAdmin(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PageableDefault(size = 20) Pageable pageable) {
+        if (!"HR".equalsIgnoreCase(principal.getRole()) && !"MANAGER".equalsIgnoreCase(principal.getRole())) {
+            return ResponseEntity.badRequest().body("Only HR and Managers can view other employees' leave history");
+        }
+        return ResponseEntity.ok(leaveService.getUserLeaves(userId, pageable));
+    }
+
     @PostMapping("/escalate")
     public ResponseEntity<String> escalatePendingLeaves() {
         int escalated = leaveService.escalatePendingLeaves();

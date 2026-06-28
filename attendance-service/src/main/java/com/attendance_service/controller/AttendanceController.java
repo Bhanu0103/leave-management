@@ -55,4 +55,15 @@ public class AttendanceController {
             @RequestParam("end") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end) {
         return ResponseEntity.ok(attendanceService.getUserAttendanceBetween(userId, start, end));
     }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getUserAttendanceByAdmin(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PageableDefault(size = 20) Pageable pageable) {
+        if (!"HR".equalsIgnoreCase(principal.getRole()) && !"MANAGER".equalsIgnoreCase(principal.getRole())) {
+            return ResponseEntity.badRequest().body("Only HR and Managers can view other employees' attendance history");
+        }
+        return ResponseEntity.ok(attendanceService.getUserHistory(userId, pageable));
+    }
 }

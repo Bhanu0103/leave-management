@@ -10,6 +10,8 @@ This system reduces payroll/attendance reconciliation time from **7 days to unde
 
 The portal is designed as a distributed microservice system where all requests flow through an API Gateway, authenticated using JWT tokens, and business events are published asynchronously to an Apache Kafka queue.
 
+![System Architecture](architecture.png)
+
 ```mermaid
 graph TD
     Client[Client / Postman] -->|Port 8080| Gateway[API Gateway]

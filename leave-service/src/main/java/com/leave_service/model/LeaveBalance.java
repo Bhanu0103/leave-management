@@ -12,6 +12,9 @@ public class LeaveBalance {
     @Column(nullable = false, unique = true)
     private Long userId;
 
+    @Version
+    private Integer version;
+
     private Integer casualLeave = 12;
     private Integer medicalLeave = 15;
     private Integer paidLeave = 18;

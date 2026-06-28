@@ -6,8 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.attendance_service.security.UserPrincipal;
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -17,31 +22,23 @@ public class AttendanceController {
     private AttendanceService attendanceService;
 
     @PostMapping("/checkin")
-    public ResponseEntity<?> checkIn(@RequestHeader("X-User-Id") Long userId) {
-        try {
-            return ResponseEntity.ok(attendanceService.checkIn(userId));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<?> checkIn(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(attendanceService.checkIn(principal.getId()));
     }
 
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkOut(@RequestHeader("X-User-Id") Long userId) {
-        try {
-            return ResponseEntity.ok(attendanceService.checkOut(userId));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<?> checkOut(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(attendanceService.checkOut(principal.getId()));
     }
 
     @GetMapping("/today")
-    public ResponseEntity<Attendance> getTodayRecord(@RequestHeader("X-User-Id") Long userId) {
-        return ResponseEntity.ok(attendanceService.getTodayRecord(userId));
+    public ResponseEntity<Attendance> getTodayRecord(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(attendanceService.getTodayRecord(principal.getId()));
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<Attendance>> getUserHistory(@RequestHeader("X-User-Id") Long userId) {
-        return ResponseEntity.ok(attendanceService.getUserHistory(userId));
+    public ResponseEntity<Page<Attendance>> getUserHistory(@AuthenticationPrincipal UserPrincipal principal, @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(attendanceService.getUserHistory(principal.getId(), pageable));
     }
 
     @GetMapping("/range")

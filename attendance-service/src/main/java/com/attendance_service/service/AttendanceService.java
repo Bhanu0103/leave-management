@@ -3,12 +3,18 @@ package com.attendance_service.service;
 import com.attendance_service.model.Attendance;
 import com.attendance_service.repository.AttendanceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.attendance_service.model.OutboxEvent;
+import com.attendance_service.repository.OutboxEventRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import org.springframework.kafka.core.KafkaTemplate;
 import com.attendance_service.dto.NotificationEvent;
@@ -24,8 +30,15 @@ public class AttendanceService {
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private static final LocalTime LATE_THRESHOLD = LocalTime.of(9, 15);
 
+    @Transactional
     public Attendance checkIn(Long userId) {
         LocalDate today = LocalDate.now();
         if (attendanceRepository.findByUserIdAndDate(userId, today).isPresent()) {
@@ -38,11 +51,12 @@ public class AttendanceService {
         Attendance attendance = new Attendance(userId, today, now, late);
         Attendance saved = attendanceRepository.save(attendance);
 
-        // Publish event asynchronously
+        // Publish event asynchronously via Outbox
         try {
             String subject = late ? "Late Check-In Flagged" : "Check-In Registered";
             String body = "Employee ID " + userId + " checked in at " + now.toLocalTime() + (late ? " (Late Arrival)" : " (On Time)");
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + userId, subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + userId, subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {
             // Log event sending failure but don't block check-in
         }
@@ -50,6 +64,7 @@ public class AttendanceService {
         return saved;
     }
 
+    @Transactional
     public Attendance checkOut(Long userId) {
         LocalDate today = LocalDate.now();
         Attendance attendance = attendanceRepository.findByUserIdAndDate(userId, today)
@@ -71,11 +86,12 @@ public class AttendanceService {
 
         Attendance saved = attendanceRepository.save(attendance);
 
-        // Publish event asynchronously
+        // Publish event asynchronously via Outbox
         try {
             String subject = "Check-Out Successful";
             String body = "Employee ID " + userId + " checked out at " + now.toLocalTime() + ". Worked hours: " + hours;
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + userId, subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + userId, subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {
             // Log event sending failure but don't block check-out
         }
@@ -87,8 +103,8 @@ public class AttendanceService {
         return attendanceRepository.findByUserIdAndDate(userId, LocalDate.now()).orElse(null);
     }
 
-    public List<Attendance> getUserHistory(Long userId) {
-        return attendanceRepository.findByUserId(userId);
+    public Page<Attendance> getUserHistory(Long userId, Pageable pageable) {
+        return attendanceRepository.findByUserId(userId, pageable);
     }
 
     public List<Attendance> getAttendanceBetween(LocalDate start, LocalDate end) {

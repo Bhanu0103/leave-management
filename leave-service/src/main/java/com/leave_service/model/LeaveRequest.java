@@ -35,7 +35,6 @@ public class LeaveRequest {
     @Column(nullable = false)
     private LeaveStatus status;
 
-    @Column(nullable = false)
     private Long managerId;
 
     private Long hrId;

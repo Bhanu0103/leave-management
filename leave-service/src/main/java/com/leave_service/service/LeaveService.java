@@ -7,11 +7,17 @@ import com.leave_service.model.LeaveType;
 import com.leave_service.repository.LeaveBalanceRepository;
 import com.leave_service.repository.LeaveRequestRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.leave_service.model.OutboxEvent;
+import com.leave_service.repository.OutboxEventRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Scheduled;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import com.leave_service.dto.NotificationEvent;
 import com.leave_service.exception.BadRequestException;
@@ -28,6 +34,12 @@ public class LeaveService {
 
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     public LeaveBalance getOrCreateBalance(Long userId) {
         return leaveBalanceRepository.findByUserId(userId)
@@ -71,7 +83,11 @@ public class LeaveService {
             }
         }
 
-        request.setStatus(LeaveStatus.PENDING_MANAGER);
+        if (request.getManagerId() == null && request.getHrId() != null) {
+            request.setStatus(LeaveStatus.PENDING_HR);
+        } else {
+            request.setStatus(LeaveStatus.PENDING_MANAGER);
+        }
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
 
@@ -79,7 +95,8 @@ public class LeaveService {
         try {
             String subject = "New Leave Request Applied";
             String body = "Employee ID " + userId + " requested " + request.getLeaveType() + " leave from " + request.getStartDate() + " to " + request.getEndDate();
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Manager_" + request.getManagerId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Manager_" + request.getManagerId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {
             // Log but don't fail business logic
         }
@@ -117,7 +134,8 @@ public class LeaveService {
         try {
             String subject = saved.getStatus() == LeaveStatus.PENDING_HR ? "Leave Request Approved by Manager (Pending HR)" : "Leave Request Approved";
             String body = "Leave request ID " + requestId + " has been approved by manager ID " + managerId + ". Current status: " + saved.getStatus();
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + saved.getUserId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + saved.getUserId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {}
         return saved;
     }
@@ -144,7 +162,8 @@ public class LeaveService {
         try {
             String subject = "Leave Request Rejected";
             String body = "Leave request ID " + requestId + " has been rejected by manager ID " + managerId;
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + saved.getUserId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + saved.getUserId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {}
         return saved;
     }
@@ -172,7 +191,8 @@ public class LeaveService {
         try {
             String subject = "Leave Request Approved by HR";
             String body = "Leave request ID " + requestId + " has been fully approved by HR ID " + hrId;
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + saved.getUserId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + saved.getUserId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {}
         return saved;
     }
@@ -196,7 +216,8 @@ public class LeaveService {
         try {
             String subject = "Leave Request Rejected by HR";
             String body = "Leave request ID " + requestId + " has been rejected by HR ID " + hrId;
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + saved.getUserId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + saved.getUserId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {}
         return saved;
     }
@@ -226,25 +247,26 @@ public class LeaveService {
         try {
             String subject = "Leave Request Cancelled";
             String body = "Leave request ID " + requestId + " has been cancelled by you.";
-            kafkaTemplate.send("notification-topic", new NotificationEvent("Employee_" + saved.getUserId(), subject, body));
+            NotificationEvent event = new NotificationEvent("Employee_" + saved.getUserId(), subject, body);
+            outboxEventRepository.save(new OutboxEvent("notification-topic", objectMapper.writeValueAsString(event)));
         } catch (Exception e) {}
         return saved;
     }
 
-    public List<LeaveRequest> getUserLeaves(Long userId) {
-        return leaveRequestRepository.findByUserId(userId);
+    public Page<LeaveRequest> getUserLeaves(Long userId, Pageable pageable) {
+        return leaveRequestRepository.findByUserId(userId, pageable);
     }
 
-    public List<LeaveRequest> getPendingManagerApprovals(Long managerId) {
-        return leaveRequestRepository.findByManagerIdAndStatus(managerId, LeaveStatus.PENDING_MANAGER);
+    public Page<LeaveRequest> getPendingManagerApprovals(Long managerId, Pageable pageable) {
+        return leaveRequestRepository.findByManagerIdAndStatus(managerId, LeaveStatus.PENDING_MANAGER, pageable);
     }
 
-    public List<LeaveRequest> getPendingHRApprovals() {
-        return leaveRequestRepository.findByStatus(LeaveStatus.PENDING_HR);
+    public Page<LeaveRequest> getPendingHRApprovals(Long hrId, Pageable pageable) {
+        return leaveRequestRepository.findByHrIdAndStatus(hrId, LeaveStatus.PENDING_HR, pageable);
     }
 
-    public List<LeaveRequest> getAllLeaves() {
-        return leaveRequestRepository.findAll();
+    public Page<LeaveRequest> getAllLeaves(Pageable pageable) {
+        return leaveRequestRepository.findAll(pageable);
     }
 
     private void deductBalance(Long userId, LeaveType type, int days) {
@@ -311,7 +333,7 @@ public class LeaveService {
     }
 
     private long calculateContiguousMedicalDays(Long userId, java.time.LocalDate newStart, java.time.LocalDate newEnd) {
-        List<LeaveRequest> existingLeaves = leaveRequestRepository.findByUserId(userId);
+        List<LeaveRequest> existingLeaves = leaveRequestRepository.findAllByUserId(userId);
         java.util.Set<java.time.LocalDate> medicalDates = new java.util.HashSet<>();
         
         java.time.LocalDate d = newStart;
@@ -343,5 +365,17 @@ public class LeaveService {
         }
         
         return calculateBusinessDays(checkBackward.plusDays(1), checkForward.minusDays(1));
+    }
+
+    @Scheduled(cron = "0 0 0 1 */3 *")
+    @Transactional
+    public void addQuarterlyLeaves() {
+        List<LeaveBalance> allBalances = leaveBalanceRepository.findAll();
+        for (LeaveBalance balance : allBalances) {
+            balance.setCasualLeave(balance.getCasualLeave() + 3);
+            balance.setMedicalLeave(balance.getMedicalLeave() + 1);
+            balance.setPaidLeave(balance.getPaidLeave() + 3);
+        }
+        leaveBalanceRepository.saveAll(allBalances);
     }
 }

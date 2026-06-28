@@ -3,7 +3,10 @@ package com.auth_service.service;
 import com.auth_service.dto.AuthResponse;
 import com.auth_service.dto.LoginRequest;
 import com.auth_service.dto.RegisterRequest;
+import com.auth_service.dto.KycSubmissionRequest;
 import com.auth_service.dto.UserResponse;
+import com.auth_service.dto.UpdateProfileRequest;
+import com.auth_service.dto.ChangePasswordRequest;
 import com.auth_service.model.Role;
 import com.auth_service.model.User;
 import com.auth_service.repository.UserRepository;
@@ -34,18 +37,14 @@ public class AuthService {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new BadRequestException("Email already exists");
         }
-        if (request.getRole() == Role.EMPLOYEE) {
-            if (request.getManagerId() == null) {
-                throw new BadRequestException("Manager ID is mandatory for employees");
+        if (request.getRole() == Role.EMPLOYEE || request.getRole() == Role.MANAGER) {
+            if (request.getHrId() == null) {
+                throw new BadRequestException("HR ID is mandatory for employees and managers");
             }
-            User manager = userRepository.findById(request.getManagerId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Manager not found with ID " + request.getManagerId()));
-            if (manager.getRole() != Role.MANAGER) {
-                throw new BadRequestException("The specified manager ID does not belong to a user with the MANAGER role");
-            }
-        } else {
-            if (request.getManagerId() != null) {
-                throw new BadRequestException("Managers and HR administrators cannot have a manager ID");
+            User hr = userRepository.findById(request.getHrId())
+                    .orElseThrow(() -> new ResourceNotFoundException("HR not found with ID " + request.getHrId()));
+            if (hr.getRole() != Role.HR) {
+                throw new BadRequestException("The specified HR ID does not belong to a user with the HR role");
             }
         }
 
@@ -53,25 +52,20 @@ public class AuthService {
                 request.getUsername(),
                 passwordEncoder.encode(request.getPassword()),
                 request.getRole(),
-                request.getManagerId(),
+                request.getHrId(),
                 request.getEmail()
         );
-        user.setApproved(false);
+        if (request.getRole() == Role.EMPLOYEE) {
+            user.setApproved(false);
+        } else {
+            user.setApproved(true);
+        }
 
         User savedUser = userRepository.save(user);
         return convertToResponse(savedUser);
     }
 
     public AuthResponse login(LoginRequest request) {
-        if ("admin@technova.com".equals(request.getEmail()) && "admin123".equals(request.getPassword())) {
-            String token = jwtService.generateToken(
-                    0L,
-                    "admin",
-                    "ADMIN",
-                    null
-            );
-            return new AuthResponse(token, "admin", "ADMIN", 0L);
-        }
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
@@ -80,8 +74,8 @@ public class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        if (!user.isApproved()) {
-            throw new UnauthorizedException("User account is pending admin approval");
+        if ("BLOCKED".equals(user.getStatus())) {
+            throw new UnauthorizedException("User account is blocked");
         }
 
         String token = jwtService.generateToken(
@@ -119,7 +113,15 @@ public class AuthService {
                 user.getUsername(),
                 user.getRole(),
                 user.getManagerId(),
-                user.getEmail()
+                user.getEmail(),
+                user.isApproved(),
+                user.getStatus(),
+                user.getHrId(),
+                user.getPanCard(),
+                user.getCertificatesLink(),
+                user.getPhoneNumber(),
+                user.getAddress(),
+                user.getBio()
         );
     }
 
@@ -130,5 +132,78 @@ public class AuthService {
         user.setApproved(true);
         userRepository.save(user);
         return "approved";
+    }
+
+    @Transactional
+    public String blockUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        user.setStatus("BLOCKED");
+        userRepository.save(user);
+        return "blocked";
+    }
+
+    @Transactional
+    public String unblockUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        user.setStatus("ACTIVE");
+        userRepository.save(user);
+        return "unblocked";
+    }
+
+    @Transactional
+    public String assignManager(Long userId, Long managerId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Manager not found with ID " + managerId));
+        if (manager.getRole() != Role.MANAGER) {
+            throw new BadRequestException("Assigned user must be a MANAGER");
+        }
+        user.setManagerId(managerId);
+        userRepository.save(user);
+        return "assigned";
+    }
+
+    @Transactional
+    public String submitKyc(Long userId, KycSubmissionRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        user.setPanCard(request.getPanCard());
+        user.setCertificatesLink(request.getCertificatesLink());
+        userRepository.save(user);
+        return "KYC submitted";
+    }
+
+    @Transactional
+    public String deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        userRepository.delete(user);
+        return "deleted";
+    }
+
+    @Transactional
+    public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        user.setPhoneNumber(request.getPhoneNumber());
+        user.setAddress(request.getAddress());
+        user.setBio(request.getBio());
+        userRepository.save(user);
+        return convertToResponse(user);
+    }
+
+    @Transactional
+    public String changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID " + userId));
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new BadRequestException("Incorrect old password");
+        }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        return "Password changed successfully";
     }
 }

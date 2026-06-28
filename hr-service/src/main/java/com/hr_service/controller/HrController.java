@@ -8,6 +8,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.hr_service.security.UserPrincipal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -20,12 +22,12 @@ public class HrController {
 
     @GetMapping("/reports/attendance")
     public ResponseEntity<?> getAttendanceReport(
-            @RequestHeader("X-User-Role") String role,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(value = "userId", required = false) Long userId,
             @RequestParam("start") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
             @RequestParam("end") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end) {
         
-        if (!"HR".equalsIgnoreCase(role) && !"ADMIN".equalsIgnoreCase(role)) {
+        if (!"HR".equalsIgnoreCase(principal.getRole()) && !"ADMIN".equalsIgnoreCase(principal.getRole())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access Denied: Requires HR or ADMIN role");
         }
 
@@ -39,10 +41,10 @@ public class HrController {
 
     @GetMapping("/reports/leaves")
     public ResponseEntity<?> getLeaveReport(
-            @RequestHeader("X-User-Role") String role,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(value = "userId", required = false) Long userId) {
 
-        if (!"HR".equalsIgnoreCase(role) && !"ADMIN".equalsIgnoreCase(role)) {
+        if (!"HR".equalsIgnoreCase(principal.getRole()) && !"ADMIN".equalsIgnoreCase(principal.getRole())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access Denied: Requires HR or ADMIN role");
         }
 

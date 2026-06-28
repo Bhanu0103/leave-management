@@ -43,63 +43,13 @@ public class JwtAuthenticationFilter implements Filter {
         String token = authHeader.substring(7);
         try {
             Algorithm algorithm = Algorithm.HMAC256(secret);
-            DecodedJWT jwt = JWT.require(algorithm).build().verify(token);
+            JWT.require(algorithm).build().verify(token);
 
-            Long userId = jwt.getClaim("id").asLong();
-            String username = jwt.getSubject();
-            String role = jwt.getClaim("role").asString();
-            Long managerId = jwt.getClaim("managerId").asLong();
-
-            // Wrap request to add headers
-            HeaderMapRequestWrapper requestWrapper = new HeaderMapRequestWrapper(httpRequest);
-            if (userId != null) requestWrapper.addHeader("X-User-Id", String.valueOf(userId));
-            if (username != null) requestWrapper.addHeader("X-User-Name", username);
-            if (role != null) requestWrapper.addHeader("X-User-Role", role);
-            if (managerId != null) requestWrapper.addHeader("X-User-Manager-Id", String.valueOf(managerId));
-
-            chain.doFilter(requestWrapper, response);
+            chain.doFilter(request, response);
         } catch (Exception e) {
             httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             httpResponse.setContentType("application/json");
             httpResponse.getWriter().write("{\"error\": \"Invalid or expired token\"}");
-        }
-    }
-
-    public static class HeaderMapRequestWrapper extends HttpServletRequestWrapper {
-        private final Map<String, String> headerMap = new HashMap<>();
-
-        public HeaderMapRequestWrapper(HttpServletRequest request) {
-            super(request);
-        }
-
-        public void addHeader(String name, String value) {
-            headerMap.put(name, value);
-        }
-
-        @Override
-        public String getHeader(String name) {
-            String headerValue = headerMap.get(name);
-            if (headerValue != null) {
-                return headerValue;
-            }
-            return super.getHeader(name);
-        }
-
-        @Override
-        public Enumeration<String> getHeaderNames() {
-            List<String> names = Collections.list(super.getHeaderNames());
-            names.addAll(headerMap.keySet());
-            return Collections.enumeration(names);
-        }
-
-        @Override
-        public Enumeration<String> getHeaders(String name) {
-            List<String> values = Collections.list(super.getHeaders(name));
-            if (headerMap.containsKey(name)) {
-                values = new ArrayList<>(values);
-                values.add(headerMap.get(name));
-            }
-            return Collections.enumeration(values);
         }
     }
 }

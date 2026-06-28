@@ -16,6 +16,7 @@ public class RegisterRequest {
     private Role role;
 
     private Long managerId;
+    private Long hrId;
 
     @NotBlank(message = "Email is mandatory")
     @Email(message = "Invalid email format")
@@ -33,6 +34,9 @@ public class RegisterRequest {
 
     public Long getManagerId() { return managerId; }
     public void setManagerId(Long managerId) { this.managerId = managerId; }
+
+    public Long getHrId() { return hrId; }
+    public void setHrId(Long hrId) { this.hrId = hrId; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

@@ -27,14 +27,27 @@ public class User {
     @Column(nullable = false)
     private boolean approved = false;
 
+    @Column(nullable = false)
+    private String status = "ACTIVE";
+
+    private Long hrId;
+
+    private String panCard;
+
+    private String certificatesLink;
+
+    private String phoneNumber;
+    private String address;
+    private String bio;
+
     // Constructors
     public User() {}
 
-    public User(String username, String password, Role role, Long managerId, String email) {
+    public User(String username, String password, Role role, Long hrId, String email) {
         this.username = username;
         this.password = password;
         this.role = role;
-        this.managerId = managerId;
+        this.hrId = hrId;
         this.email = email;
     }
 
@@ -59,4 +72,25 @@ public class User {
 
     public boolean isApproved() { return approved; }
     public void setApproved(boolean approved) { this.approved = approved; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public Long getHrId() { return hrId; }
+    public void setHrId(Long hrId) { this.hrId = hrId; }
+
+    public String getPanCard() { return panCard; }
+    public void setPanCard(String panCard) { this.panCard = panCard; }
+
+    public String getCertificatesLink() { return certificatesLink; }
+    public void setCertificatesLink(String certificatesLink) { this.certificatesLink = certificatesLink; }
+
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
 }
